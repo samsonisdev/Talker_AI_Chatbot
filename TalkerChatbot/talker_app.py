@@ -4,6 +4,8 @@ from tkinter import messagebox
 import pymysql
 import google.generativeai as genai
 
+login_email = ""
+
 class Chatbot:
     def __init__(self, root):
         self.root = root
@@ -34,6 +36,8 @@ class LandingPage(Chatbot):
 
 class LoginPage(Chatbot):
     def show_page(self):
+
+        global email_entry
         self.clear_window()
 
         img = ImageTk.PhotoImage(file="login-page.png")
@@ -100,6 +104,8 @@ class LoginPage(Chatbot):
             if emailnpass == None:
                 messagebox.showerror('Error', 'Email or Password do not match')
             else:
+                global login_email
+                login_email = self.email_entry.get()
                 self.clear_window()
                 CategoryPage(self.root).show_page()
 
@@ -219,8 +225,8 @@ class CategoryPage(Chatbot):
         bg_label = Label(self.root, image=img)
         bg_label.image = img
         bg_label.pack()
-        self.home = Button(self.root, text='Home', font=("Poppins Regular", 12), width='10', bg='gold', command=LandingPage(self.root).show_page)
-        self.home.place(x=875, y=12)
+        self.history = Button(self.root, text='History', font=("Poppins Regular", 12), width='10', fg='navy', bg='deep sky blue', command=History(self.root).show_page)
+        self.history.place(x=875, y=12)
 
         self.study = Button(self.root, text="Study", font=("Poppins Regular", 15), width='20', bg='gold',
                             command=Study(self.root).show_page)
@@ -335,6 +341,20 @@ class ChatInterface(Chatbot):
         self.create_message_box(self.response.text, 'white', 'w')
         self.entry.delete(0, END)  # Clear the entry box
 
+        _host = "localhost"
+        _user = "root"
+        _password = "samsonSQL.123"
+
+        try:
+            connection = pymysql.connect(host=_host, user=_user, password=_password, database="TALKER")
+            cursor = connection.cursor()
+            query = "INSERT INTO chat_history (email, user_message, chatbot_response) VALUES (%s, %s, %s)"
+            cursor.execute(query, (login_email, self.prompt, self.response.text))
+            connection.commit()
+            connection.close()
+        except Exception as e:
+            print("Error saving history:", e)
+
     def create_message_box(self, text, bg_color, anchor):
         label = Label(self.chat_window, text=text, font=('Poppins Regular', 15), width=60, foreground='black', background=bg_color, anchor=anchor, justify=LEFT, wraplength=650)
         label.pack(fill=X, pady=5)
@@ -350,6 +370,62 @@ class ChatInterface(Chatbot):
     def on_mouse_scroll(self, event):
         self.canvas.yview_scroll(int(-1*(event.delta/120)), "units")
 
+class History(Chatbot):
+    def show_page(self):
+        self.clear_window()
+
+        img = ImageTk.PhotoImage(file="talker-history-page.jpg")
+        bg_label = Label(self.root, image=img)
+        bg_label.image = img
+        bg_label.pack()
+
+        self.frame = Frame(self.root, width=800, height=400, bg="white")
+        self.frame.place(x=100, y=120)
+
+        self.canvas = Canvas(self.frame, width=800, height=400, bg="white")
+        self.canvas.pack(side=LEFT, fill=BOTH, expand=True)
+
+        self.scrollbar = Scrollbar(self.frame, orient=VERTICAL, command=self.canvas.yview)
+        self.scrollbar.pack(side=RIGHT, fill=Y)
+
+        self.canvas.configure(yscrollcommand=self.scrollbar.set)
+        self.chat_frame = Frame(self.canvas, bg="white")
+        self.canvas.create_window((0, 0), window=self.chat_frame, anchor="nw")
+
+        try:
+            connection = pymysql.connect(host="localhost", user="root", password="samsonSQL.123", database="TALKER")
+            cursor = connection.cursor()
+            query = "SELECT user_message, chatbot_response FROM chat_history WHERE email=%s ORDER BY id DESC"
+            cursor.execute(query, (login_email,))
+            chat_history = cursor.fetchall()
+            connection.close()
+
+            if chat_history:
+                for user_msg, bot_resp in chat_history:
+                    user_label = Label(self.chat_frame, text=f"You: {user_msg}", font=("Poppins Regular", 12), bg="light blue", wraplength=750, justify=LEFT, anchor="e")
+                    user_label.pack(fill=X, pady=5)
+                    bot_label = Label(self.chat_frame, text=f"Talker: {bot_resp}", font=("Poppins Regular", 12), bg="white", wraplength=750, justify=LEFT, anchor="w")
+                    bot_label.pack(fill=X, pady=5)
+            else:
+                no_history_label = Label(self.chat_frame, text="No chat history found.", font=("Poppins Regular", 14), bg="white", fg="gray")
+                no_history_label.pack(pady=20)
+        except Exception as e:
+            error_label = Label(self.chat_frame, text="Error loading chat history.", font=("Poppins Regular", 14), bg="white", fg="red")
+            error_label.pack(pady=20)
+            print("Error fetching history:", e)
+
+        self.chat_frame.update_idletasks()
+        self.canvas.config(scrollregion=self.canvas.bbox("all"))
+
+        back_button = Button(self.root, text="<", font=("Poppins Regular", 12), height=1, width=10, fg='black', bg='gold',
+                             command=CategoryPage(self.root).show_page)
+        back_button.place(x=3, y=553)
+
+        self.frame.bind_all("<MouseWheel>", self.on_mouse_scroll)
+
+    def on_mouse_scroll(self, event):
+        self.canvas.yview_scroll(int(-1*(event.delta/120)), "units")
+
 class TalkerChatbot:
     def __init__(self):
         self.root = Tk()
@@ -360,6 +436,5 @@ class TalkerChatbot:
         LandingPage(self.root).show_page()
 
         self.root.mainloop()
-
 
 TalkerChatbot()
